@@ -1,0 +1,394 @@
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <rom/ets_sys.h>
+#include "lcd_driver.h"
+#include "timer.h" // for unix_ts
+
+static const char *TAG = "I2C_LCD";
+static const uint8_t COMMAND_8BIT_MODE = 0b00110000;
+static const uint8_t COMMAND_4BIT_MODE = 0b00100000;
+static const uint8_t INIT_COMMANDS[] = {
+    0b00101000, // Function set: 4-bit mode, 2 lines, 5x8 dots
+    0b00001100, // Display control: display on, cursor off, blink off
+    0b00000001, // Clear display
+    0b00000110, // Entry mode set: increment cursor, no shift
+    0b00000010, // Set cursor to home position
+    0b10000000  // Set cursor to first line
+};
+
+static const char *SPLASH_SCREEN_CONTENT =
+    "   Splash Screen    "
+    "                    "
+    "    Model Clock     "
+    "    v0.1            ";
+static const char *RESTART_SCREEN_CONTENT =
+    "   Restarting...    "
+    "                    "
+    "    Model Clock     "
+    "    v0.1            ";
+
+static i2c_master_dev_handle_t i2c_device_handle = NULL;
+static i2c_master_bus_handle_t i2c_bus_handle = NULL;
+static uint8_t lcd_backlight_status = LCD_BACKLIGHT;
+
+static char lcd_buffer[LCD_BUFFER_DEPTH][LCD_BUFFER_SIZE]; // 2x80-byte buffer for the LCD
+static uint8_t lcd_buffer_index_active = 0;
+static uint8_t lcd_buffer_index_draw = 1;
+static bool isRendering = false;
+static bool next_render_requested = false;
+
+static uint8_t cursor_col = 0;
+static uint8_t cursor_row = 0;
+
+static lcd_screen_state_t lcd_screen_state = LCD_SCREEN_SPLASH;
+
+static void lcd_init_cycle(void);
+static esp_err_t i2c_send_with_toggle(uint8_t data);
+static esp_err_t i2c_send_4bit_data(uint8_t data, uint8_t rs);
+static bool compare_double_buffer(void);
+
+void lcd_render_cycle()
+{
+  if (isRendering)
+  {
+    return;
+  }
+  isRendering = true;
+
+  switch (lcd_screen_state)
+  {
+  case LCD_SCREEN_SPLASH:
+    constant_screen(SPLASH_SCREEN_CONTENT);
+    break;
+  case LCD_SCREEN_RESTARTING:
+    constant_screen(RESTART_SCREEN_CONTENT);
+    break;
+  case LCD_SCREEN_CLOCK:
+    screen_clock();
+    break;
+  case LCD_SCREEN_SETTINGS:
+    screen_settings();
+    break;
+  default:
+    break;
+  }
+
+  lcd_render();
+  isRendering = false;
+}
+
+// Render the buffer to the LCD
+void lcd_render(void)
+{
+  // Compare the two buffers
+  if (compare_double_buffer())
+  {
+    return;
+  }
+
+  // Swap the buffers
+  lcd_buffer_index_active = lcd_buffer_index_draw;
+  lcd_buffer_index_draw = (lcd_buffer_index_draw + 1) % LCD_BUFFER_DEPTH;
+
+  // Send the buffer to the LCD
+  for (uint8_t row = 0; row < LCD_ROWS; row++)
+  {
+    lcd_set_cursor_position(0, row);
+    for (uint8_t col = 0; col < LCD_COLS; col++)
+    {
+      ESP_ERROR_CHECK(i2c_send_4bit_data(lcd_buffer[lcd_buffer_index_active][row * LCD_COLS + col], LCD_RS_DATA));
+    }
+  }
+}
+
+void lcd_update_task(void *pvParameter)
+{
+  const TickType_t frame_delay = pdMS_TO_TICKS(1000 / LCD_FPS);
+  TickType_t last_render_tick = xTaskGetTickCount();
+
+  for (;;)
+  {
+    if (next_render_requested)
+    {
+      // Wait for the current render to finish
+      while (isRendering)
+        vTaskDelay(pdMS_TO_TICKS(10));
+
+      next_render_requested = false;
+      last_render_tick = xTaskGetTickCount(); // Reset the render tick
+      lcd_render_cycle();
+    }
+    else if (xTaskGetTickCount() - last_render_tick >= frame_delay)
+    {
+      last_render_tick = xTaskGetTickCount();
+      lcd_render_cycle();
+    }
+    vTaskDelay(pdMS_TO_TICKS(10)); // Yield to other tasks
+  }
+}
+
+// -----------------
+// LCD Screens
+// -----------------
+
+void constant_screen(const char *content)
+{
+  // Display the splash screen on the LCD
+  lcd_clear_buffer();
+  lcd_set_cursor(0, 0);
+  lcd_write_buffer(content, strlen(content));
+}
+
+void screen_clock(void)
+{
+  lcd_clear_buffer();
+
+  // Real time in the first line
+  lcd_set_cursor(0, 0);
+  char bufR[21];
+  time_t now = time(NULL);
+  format_time(now, bufR, sizeof(bufR));
+  lcd_write_buffer(bufR, strlen(bufR));
+
+  // Model time in the second line
+  lcd_set_cursor(0, 1);
+  char bufM[21];
+  format_time(unix_ts, bufM, sizeof(bufM));
+  lcd_write_buffer(bufM, strlen(bufM));
+
+  // App state in the last line
+  lcd_set_cursor(0, 3);
+  if (timer_is_running())
+  {
+    lcd_write_text("RUNNING");
+  }
+  else
+  {
+    lcd_write_text("PAUSED");
+  }
+  lcd_set_cursor(16, 3);
+  lcd_write_text("1:");
+  uint32_t app_scale = timer_get_timescale();
+  lcd_write_textf("%02d", 2, app_scale);
+}
+
+void screen_settings(void)
+{
+  lcd_clear_buffer();
+  lcd_set_cursor(0, 0);
+  lcd_write_text("Settings");
+}
+
+// -----------------
+// Initialization
+// -----------------
+
+void i2c_initialize(void)
+{
+  // Initialize the I2C master
+  i2c_master_bus_config_t i2c_bus_config = {
+      .clk_source = I2C_CLK_SRC_DEFAULT,
+      .i2c_port = I2C_MASTER_NUM,
+      .scl_io_num = I2C_MASTER_SCL_IO,
+      .sda_io_num = I2C_MASTER_SDA_IO,
+      .glitch_ignore_cnt = 7,
+      .flags.enable_internal_pullup = true};
+  ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle));
+  ESP_LOGI(TAG, "I2C bus initialized");
+
+  i2c_device_config_t i2c_device_config = {
+      .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+      .device_address = LCD_I2C_ADDRESS,
+      .scl_speed_hz = I2C_MASTER_FREQ_HZ};
+  ESP_ERROR_CHECK(i2c_master_bus_add_device(i2c_bus_handle, &i2c_device_config, &i2c_device_handle));
+  ESP_LOGI(TAG, "I2C device added");
+  vTaskDelay(pdMS_TO_TICKS(50)); // Wait for LCD to power up
+  ESP_LOGI(TAG, "I2C device initialized");
+}
+
+static void lcd_init_cycle(void)
+{
+  // Initialize the LCD
+  ESP_ERROR_CHECK(i2c_send_with_toggle(lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+  ESP_ERROR_CHECK(i2c_send_with_toggle(COMMAND_8BIT_MODE | lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+  ESP_ERROR_CHECK(i2c_send_with_toggle(COMMAND_8BIT_MODE | lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+  ESP_ERROR_CHECK(i2c_send_with_toggle(COMMAND_8BIT_MODE | lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+  ESP_ERROR_CHECK(i2c_send_with_toggle(COMMAND_4BIT_MODE | lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+
+  for (uint8_t i = 0; i < sizeof(INIT_COMMANDS); i++)
+  {
+    ESP_ERROR_CHECK(i2c_send_4bit_data(INIT_COMMANDS[i], LCD_RS_CMD));
+    ets_delay_us(1000);
+  }
+
+  lcd_toggle_backlight(true);
+  lcd_clear_buffer();
+}
+
+void lcd_initialize(void)
+{
+
+  lcd_init_cycle();
+
+  lcd_render();
+  lcd_render_cycle();
+
+  // events_subscribe(EVENT_BUTTON_SHORT_PRESS, lcd_event_handler, NULL);
+
+  // Create LCD update task
+  xTaskCreatePinnedToCore(lcd_update_task, "lcd_update_task", 4096, NULL, 5, NULL, 0);
+}
+
+// -----------------
+// Utility functions
+// -----------------
+
+static bool compare_double_buffer(void)
+{
+  // Compare the two double buffers
+  for (uint8_t row = 0; row < LCD_ROWS; row++)
+  {
+    for (uint8_t col = 0; col < LCD_COLS; col++)
+    {
+      if (lcd_buffer[lcd_buffer_index_active][row * LCD_COLS + col] != lcd_buffer[lcd_buffer_index_draw][row * LCD_COLS + col])
+        return false;
+    }
+  }
+  return true;
+}
+
+static esp_err_t i2c_send_with_toggle(uint8_t data)
+{
+  // Helper function to toggle the enable bit
+  uint8_t data_with_enable = data | LCD_ENABLE;
+  ESP_ERROR_CHECK(i2c_master_transmit(i2c_device_handle, &data_with_enable, 1, -1));
+  ets_delay_us(50);
+
+  data_with_enable &= ~LCD_ENABLE;
+  ESP_ERROR_CHECK(i2c_master_transmit(i2c_device_handle, &data_with_enable, 1, -1));
+  ets_delay_us(50);
+
+  return ESP_OK;
+}
+
+static esp_err_t i2c_send_4bit_data(uint8_t data, uint8_t rs)
+{
+  // Send a byte of data to the LCD in 4-bit mode
+  uint8_t nibbles[2] = {
+      (data & 0xF0) | rs | lcd_backlight_status | LCD_RW_WRITE,
+      ((data << 4) & 0xF0) | rs | lcd_backlight_status | LCD_RW_WRITE};
+  ESP_ERROR_CHECK(i2c_send_with_toggle(nibbles[0]));
+  ESP_ERROR_CHECK(i2c_send_with_toggle(nibbles[1]));
+
+  return ESP_OK;
+}
+
+void lcd_set_cursor_position(uint8_t col, uint8_t row)
+{
+  // Set the cursor position on the LCD
+  if (col >= LCD_COLS)
+    col = LCD_COLS - 1;
+  if (row >= LCD_ROWS)
+    row = LCD_ROWS - 1;
+
+  static const uint8_t row_offsets[] = LCD_ROW_OFFSET;
+  uint8_t data = 0x80 | (col + row_offsets[row]);
+  ESP_ERROR_CHECK(i2c_send_4bit_data(data, LCD_RS_CMD));
+}
+
+void lcd_set_cursor(uint8_t col, uint8_t row)
+{
+  // Update the cursor position in the buffer
+  if (col < LCD_COLS && row < LCD_ROWS)
+  {
+    cursor_col = col;
+    cursor_row = row;
+  }
+}
+
+void lcd_clear_buffer(void)
+{
+  memset(lcd_buffer[lcd_buffer_index_draw], ' ', LCD_BUFFER_SIZE);
+  lcd_set_cursor(0, 0);
+}
+
+void lcd_write_character(char c)
+{
+  // ESP_LOGI(TAG, "idx: %d", lcd_buffer_index_draw);
+  // Write a single character to the buffer
+  if (cursor_col < LCD_COLS && cursor_row < LCD_ROWS)
+  {
+    lcd_buffer[lcd_buffer_index_draw][cursor_row * LCD_COLS + cursor_col] = c;
+    cursor_col++;
+    if (cursor_col >= LCD_COLS)
+    {
+      cursor_col = 0;
+      cursor_row = (cursor_row + 1) % LCD_ROWS;
+    }
+  }
+}
+
+void lcd_write_textf(const char *str, size_t size, ...)
+{
+  char buffer[size + 1];
+  va_list args;
+  va_start(args, size);
+  vsnprintf(buffer, size + 1, str, args);
+  va_end(args);
+  lcd_write_buffer(buffer, strlen(buffer));
+}
+
+void lcd_write_text(const char *str)
+{
+  while (*str)
+  {
+    lcd_write_character(*str);
+    str++;
+  }
+}
+
+void lcd_write_buffer(const char *buffer, size_t size)
+{
+  for (size_t i = 0; i < size; i++)
+  {
+    lcd_write_character(buffer[i]);
+  }
+}
+
+void lcd_toggle_backlight(bool state)
+{
+  // Control the LCD backlight
+  if (state)
+  {
+    lcd_backlight_status |= LCD_BACKLIGHT;
+  }
+  else
+  {
+    lcd_backlight_status &= ~LCD_BACKLIGHT;
+  }
+  ESP_ERROR_CHECK(i2c_master_transmit(i2c_device_handle, &lcd_backlight_status, 1, -1));
+}
+
+// -----------------
+// Screen State utilities
+// -----------------
+
+void lcd_set_screen_state(lcd_screen_state_t state)
+{
+  if (state < LCD_SCREEN_MAX)
+  {
+    lcd_screen_state = state;
+  }
+  else
+  {
+    lcd_screen_state = LCD_SCREEN_START_SCREEN;
+  }
+  lcd_clear_buffer();
+  next_render_requested = true;
+}
+
+lcd_screen_state_t lcd_get_screen_state(void)
+{
+  return lcd_screen_state;
+}

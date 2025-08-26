@@ -1,0 +1,73 @@
+#ifndef LCD_DRIVER_H
+#define LCD_DRIVER_H
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/i2c_master.h"
+#include "driver/gpio.h"
+#include "esp_log.h"
+
+// I2C configuration
+#define I2C_MASTER_NUM        I2C_NUM_0
+#define I2C_MASTER_SDA_IO     8
+#define I2C_MASTER_SCL_IO     9
+#define I2C_MASTER_FREQ_HZ    100000
+#define LCD_I2C_ADDRESS       0x27
+
+// LCD commands
+#define WRITE_BIT           I2C_MASTER_WRITE
+
+#define LCD_BACKLIGHT (1 << 3) // Backlight bit
+#define LCD_ENABLE (1 << 2)   // Enable bit
+#define LCD_ENABLE_OFF (0 << 2) // Enable off
+#define LCD_RW (1 << 1)      // Read/Write bit
+#define LCD_RW_WRITE (0 << 1) // Write mode
+#define LCD_RW_READ (1 << 1)  // Read mode
+#define LCD_RS (1 << 0)      // Register Select bit
+#define LCD_RS_CMD (0 << 0)    // Command mode
+#define LCD_RS_DATA (1 << 0)   // Data mode
+#define LCD_DB7 (1 << 7) // Data bit 7
+#define LCD_DB6 (1 << 6) // Data bit 6
+#define LCD_DB5 (1 << 5) // Data bit 5
+#define LCD_DB4 (1 << 4) // Data bit 4
+
+#define LCD_FPS 2 // Frames per second
+#define LCD_COLS 20
+#define LCD_ROWS 4
+#define LCD_ROW_OFFSET {0x00, 0x40, 0x14, 0x54} // Row offsets for 20x4 LCD
+#define LCD_BUFFER_SIZE (LCD_COLS * LCD_ROWS)
+#define LCD_BUFFER_DEPTH 2 // Double buffering
+
+typedef enum {
+    LCD_SCREEN_SPLASH = 0,
+    LCD_SCREEN_RESTARTING,
+    LCD_SCREEN_CLOCK,
+    LCD_SCREEN_SETTINGS,
+    LCD_SCREEN_MAX
+} lcd_screen_state_t;
+#define LCD_SCREEN_START_SCREEN LCD_SCREEN_CLOCK
+
+void i2c_initialize(void);
+void lcd_initialize(void);
+void lcd_set_cursor_position(uint8_t col, uint8_t row);
+void lcd_set_cursor(uint8_t col, uint8_t row);
+void lcd_clear_buffer(void);
+void lcd_write_character(char c);
+void lcd_write_text(const char *str);
+void lcd_write_textf(const char *str, size_t size, ...);
+void lcd_write_buffer(const char *buffer, size_t size);
+void lcd_toggle_backlight(bool state);
+void lcd_render(void);
+void lcd_render_cycle();
+void lcd_update_task(void *pvParameter);
+
+void constant_screen(const char *content);
+void screen_clock(void);
+void screen_settings(void);
+
+// Get the current screen state.
+lcd_screen_state_t lcd_get_screen_state(void);
+// Set the current screen state.
+void lcd_set_screen_state(lcd_screen_state_t state);
+
+#endif
