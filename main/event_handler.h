@@ -17,6 +17,8 @@ enum
   EVENT_TIMER_PAUSE,        // Event for timer pause
   EVENT_TIMER_SCALE,        // Event for timer scale
   EVENT_TIMER_STATE_CHANGE, // Event for timer state change
+  EVENT_LCD_UPDATE,         // Event for LCD update
+  EVENT_EXIT_INIT_STATE,    // Event for exit init state
 };
 
 void events_init(void);

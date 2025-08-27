@@ -3,6 +3,7 @@
 #include <string.h>
 #include <rom/ets_sys.h>
 #include "lcd_driver.h"
+#include "event_handler.h"
 #include "timer.h" // for unix_ts
 
 static const char *TAG = "I2C_LCD";
@@ -43,10 +44,30 @@ static uint8_t cursor_row = 0;
 
 static lcd_screen_state_t lcd_screen_state = LCD_SCREEN_SPLASH;
 
+// Forward declarations
+
+void lcd_set_cursor_position(uint8_t col, uint8_t row);
+void lcd_set_cursor(uint8_t col, uint8_t row);
+void lcd_clear_buffer(void);
+void lcd_write_character(char c);
+void lcd_write_text(const char *str);
+void lcd_write_textf(const char *str, size_t size, ...);
+void lcd_write_buffer(const char *buffer, size_t size);
+void lcd_toggle_backlight(bool state);
+void lcd_render(void);
+void lcd_render_cycle();
+void lcd_update_task(void *pvParameter);
+
+void constant_screen(const char *content);
+void screen_clock(void);
+void screen_settings(void);
+
 static void lcd_init_cycle(void);
 static esp_err_t i2c_send_with_toggle(uint8_t data);
 static esp_err_t i2c_send_4bit_data(uint8_t data, uint8_t rs);
 static bool compare_double_buffer(void);
+
+static void lcd_event_handler(void *handler_arg, esp_event_base_t base, int32_t id, void *event_data);
 
 void lcd_render_cycle()
 {
@@ -234,7 +255,7 @@ void lcd_initialize(void)
   lcd_render();
   lcd_render_cycle();
 
-  // events_subscribe(EVENT_BUTTON_SHORT_PRESS, lcd_event_handler, NULL);
+  events_subscribe(EVENT_LCD_UPDATE, lcd_event_handler, NULL);
 
   // Create LCD update task
   xTaskCreatePinnedToCore(lcd_update_task, "lcd_update_task", 4096, NULL, 5, NULL, 0);
@@ -370,25 +391,15 @@ void lcd_toggle_backlight(bool state)
   ESP_ERROR_CHECK(i2c_master_transmit(i2c_device_handle, &lcd_backlight_status, 1, -1));
 }
 
+
 // -----------------
-// Screen State utilities
+// LCD Event Handler
 // -----------------
 
-void lcd_set_screen_state(lcd_screen_state_t state)
+static void lcd_event_handler(void *handler_arg, esp_event_base_t base, int32_t id, void *event_data)
 {
-  if (state < LCD_SCREEN_MAX)
+  if (base == CUSTOM_EVENTS && id == EVENT_LCD_UPDATE)
   {
-    lcd_screen_state = state;
+    next_render_requested = true;
   }
-  else
-  {
-    lcd_screen_state = LCD_SCREEN_START_SCREEN;
-  }
-  lcd_clear_buffer();
-  next_render_requested = true;
-}
-
-lcd_screen_state_t lcd_get_screen_state(void)
-{
-  return lcd_screen_state;
 }

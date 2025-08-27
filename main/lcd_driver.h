@@ -49,25 +49,6 @@ typedef enum {
 
 void i2c_initialize(void);
 void lcd_initialize(void);
-void lcd_set_cursor_position(uint8_t col, uint8_t row);
-void lcd_set_cursor(uint8_t col, uint8_t row);
-void lcd_clear_buffer(void);
-void lcd_write_character(char c);
-void lcd_write_text(const char *str);
-void lcd_write_textf(const char *str, size_t size, ...);
-void lcd_write_buffer(const char *buffer, size_t size);
-void lcd_toggle_backlight(bool state);
-void lcd_render(void);
-void lcd_render_cycle();
-void lcd_update_task(void *pvParameter);
 
-void constant_screen(const char *content);
-void screen_clock(void);
-void screen_settings(void);
-
-// Get the current screen state.
-lcd_screen_state_t lcd_get_screen_state(void);
-// Set the current screen state.
-void lcd_set_screen_state(lcd_screen_state_t state);
 
 #endif

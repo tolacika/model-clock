@@ -2,6 +2,8 @@
 #include "esp_log.h"
 #include "state_machine.h"
 #include "event_handler.h"
+#include "button_driver.h"
+#include "timer.h"
 
 static const char *TAG = "state_machine";
 
@@ -69,31 +71,73 @@ void state_machine_init(void)
 {
   ESP_LOGI(TAG, "Initializing state machine");
 
-  state = STATE_CLOCK;
+  state = STATE_INIT;
   menu_sub = MENU_BROWSE;
   edit_mode = EDIT_NONE;
-
-  // Ensure the app starts in clock state
-  enter_state_clock();
 
   // Subscribe to button, ticks and timer state events
   events_subscribe(EVENT_BUTTON_PRESS, state_event_handler, NULL);
   events_subscribe(EVENT_MODEL_TICK, state_event_handler, NULL);
   events_subscribe(EVENT_TIMER_STATE_CHANGE, state_event_handler, NULL);
+  events_subscribe(EVENT_EXIT_INIT_STATE, state_event_handler, NULL);
 
   ESP_LOGI(TAG, "State machine initialized");
 }
 
 static void state_event_handler(void *handler_arg, esp_event_base_t base, int32_t id, void *event_data)
 {
+  if (base != CUSTOM_EVENTS)
+    return;
+
+  if (id == EVENT_EXIT_INIT_STATE)
+  {
+    if (state == STATE_INIT)
+      enter_state_clock();
+  }
+  else if (id == EVENT_BUTTON_PRESS)
+  {
+    if (state == STATE_INIT || state == STATE_RESTART)
+      return; // ignore button press in init state
+
+    button_t btn = *(button_t *)event_data;
+    ESP_LOGI(TAG, "Button pressed: %d", btn);
+
+    if (btn == BUTTON_START_STOP)
+    {
+      if (timer_is_running())
+        timer_pause();
+      else
+        timer_resume();
+
+      return; // pause/resume handled globally (state independent)
+    }
+    else if (btn == BUTTON_MENU)
+    {
+      if (state == STATE_CLOCK)
+        enter_state_menu();
+      else if (state == STATE_MENU)
+        enter_state_clock();
+
+      return; // menu handled globally (state independent)
+    }
+
+    if (state == STATE_CLOCK)
+    {
+    }
+    else if (state == STATE_MENU)
+    {
+    }
+    else if (state == STATE_EDIT)
+    {
+    }
+  }
 }
 
 /* --- State enter/exit --- */
 static void enter_state_clock(void)
 {
-    state = STATE_CLOCK;
+  state = STATE_CLOCK;
 
-    // Render one frame now
-    //render_clock_screen_now();
+  // Render one frame now
+  // render_clock_screen_now();
 }
-

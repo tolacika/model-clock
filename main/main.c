@@ -39,7 +39,8 @@ void app_main(void)
 
   vTaskDelay(pdMS_TO_TICKS(3000));
 
-  lcd_set_screen_state(LCD_SCREEN_START_SCREEN);
+  //lcd_set_screen_state(LCD_SCREEN_START_SCREEN);
+  events_post(EVENT_EXIT_INIT_STATE, NULL, 0);
 
   // Core 0 could run other system stuff here
   while (true)
