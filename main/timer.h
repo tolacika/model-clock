@@ -13,6 +13,9 @@
 #define DEFAULT_TIMESCALE 2
 #define MAX_TIMESCALE 60
 
+#define DEFAULT_UNIX_TS 1735689600ULL
+#define DEFAULT_REAL_TS 1735689600ULL
+
 #define TIMER_RES_HZ 1000000ULL
 
 // Global model time counter (UNIX timestamp in seconds)
@@ -39,8 +42,5 @@ uint32_t tm_to_ts(struct tm *in);
 
 // Check if timer is running
 bool timer_is_running(void);
-
-// Set timescale
-void timer_set_timescale(uint32_t new_timescale);
 
 #endif

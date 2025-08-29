@@ -30,6 +30,7 @@ static const char *RESTART_SCREEN_CONTENT =
     "    Model Clock     "
     "    v0.1            ";
 
+static TaskHandle_t lcd_task_handle = NULL;
 static i2c_master_dev_handle_t i2c_device_handle = NULL;
 static i2c_master_bus_handle_t i2c_bus_handle = NULL;
 static uint8_t lcd_backlight_status = LCD_BACKLIGHT;
@@ -38,7 +39,7 @@ static char lcd_buffer[LCD_BUFFER_DEPTH][LCD_BUFFER_SIZE]; // 2x80-byte buffer f
 static uint8_t lcd_buffer_index_active = 0;
 static uint8_t lcd_buffer_index_draw = 1;
 static bool isRendering = false;
-static bool next_render_requested = false;
+//static bool next_render_requested = false;
 
 static uint8_t cursor_col = 0;
 static uint8_t cursor_row = 0;
@@ -132,27 +133,25 @@ void lcd_render(void)
 
 void lcd_update_task(void *pvParameter)
 {
-  const TickType_t frame_delay = pdMS_TO_TICKS(1000 / LCD_FPS);
-  TickType_t last_render_tick = xTaskGetTickCount();
+  lcd_task_handle = xTaskGetCurrentTaskHandle();
 
+  // Wait for the current render to finish
+  while (isRendering)
+    vTaskDelay(pdMS_TO_TICKS(10));
+  
   for (;;)
   {
-    if (next_render_requested)
+    // Wait until either timeout (frame) or a notification triggers immediate render
+    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000 / LCD_FPS)) > 0)
     {
-      // Wait for the current render to finish
-      while (isRendering)
-        vTaskDelay(pdMS_TO_TICKS(10));
-
-      next_render_requested = false;
-      last_render_tick = xTaskGetTickCount(); // Reset the render tick
+      // notification: render immediately
       lcd_render_cycle();
     }
-    else if (xTaskGetTickCount() - last_render_tick >= frame_delay)
+    else
     {
-      last_render_tick = xTaskGetTickCount();
+      // timeout: render next frame
       lcd_render_cycle();
     }
-    vTaskDelay(pdMS_TO_TICKS(10)); // Yield to other tasks
   }
 }
 
@@ -391,7 +390,7 @@ void lcd_initialize(void)
   events_subscribe(EVENT_LCD_UPDATE, lcd_event_handler, NULL);
 
   // Create LCD update task
-  xTaskCreatePinnedToCore(lcd_update_task, "lcd_update_task", 4096, NULL, 5, NULL, 0);
+  xTaskCreatePinnedToCore(lcd_update_task, "lcd_update_task", 4096, NULL, 5, NULL, 1);
 }
 
 // -----------------
@@ -532,6 +531,7 @@ static void lcd_event_handler(void *handler_arg, esp_event_base_t base, int32_t 
 {
   if (base == CUSTOM_EVENTS && id == EVENT_LCD_UPDATE)
   {
-    next_render_requested = true;
+    if (lcd_task_handle)
+      xTaskNotifyGive(lcd_task_handle);
   }
 }

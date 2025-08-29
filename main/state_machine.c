@@ -22,7 +22,7 @@ static const char *menu_items[] = {
 #define MENU_PAGE_ROWS 4
 
 /* --- Application state --- */
-static top_state_t state = STATE_CLOCK;
+static top_state_t state = STATE_INIT;
 static menu_substate_t menu_sub = MENU_BROWSE; // Todo: Biztos kell ez ide?
 static edit_mode_t edit_mode = EDIT_NONE;
 
@@ -34,7 +34,6 @@ static int menu_scroll_top = 0;
 static uint32_t edit_timescale = 1;
 
 /* datetime edit */
-static struct tm edit_dt;
 static uint32_t edit_timestamp;
 static int edit_cursor = 0; // 0..5, field index
 
@@ -492,5 +491,5 @@ static void apply_model_time(uint32_t ts)
 
 static void apply_timescale(uint32_t timescale)
 {
-  timer_set_timescale(timescale);
+  events_post(EVENT_TIMER_SCALE, &timescale, sizeof(timescale));
 }

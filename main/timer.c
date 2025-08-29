@@ -5,7 +5,7 @@
 
 static const char *TAG = "model_timer";
 
-volatile uint32_t unix_ts = 1735689600ULL; // Start: 2025-01-01 00:00:00
+volatile uint32_t unix_ts = DEFAULT_UNIX_TS; // Start: 2025-01-01 00:00:00
 QueueHandle_t tick_queue;
 
 static gptimer_handle_t gptimer = NULL;
@@ -16,6 +16,8 @@ static bool timer_running = false;
 void timer_pause(void);
 // Resume timer
 void timer_resume(void);
+// Set timescale
+void timer_set_timescale(uint32_t new_timescale);
 
 // ----------------------
 // ISR callback

@@ -7,6 +7,7 @@
 #include "led_driver.h"
 #include "button_driver.h"
 #include "state_machine.h"
+#include "storage.h"
 
 static const char *TAG = "main";
 
@@ -23,6 +24,8 @@ void tick_logger_handler(void *handler_arg, esp_event_base_t base, int32_t id, v
 // ----------------------
 void app_main(void)
 {
+  storage_init();
+
   events_init();
 
   events_subscribe(EVENT_MODEL_TICK, tick_logger_handler, NULL);
@@ -40,6 +43,8 @@ void app_main(void)
 
   state_machine_init();
 
+  storage_load();
+
   vTaskDelay(pdMS_TO_TICKS(3000));
 
   //lcd_set_screen_state(LCD_SCREEN_START_SCREEN);
@@ -48,7 +53,10 @@ void app_main(void)
   // Core 0 could run other system stuff here
   while (true)
   {
-    vTaskDelay(pdMS_TO_TICKS(10000));
+    vTaskDelay(pdMS_TO_TICKS(60 * 1000));
+
+    storage_save();
+
     ESP_LOGI(TAG, "Heartbeat, real=%llu, model=%lu", time(NULL), unix_ts);
   }
 }
