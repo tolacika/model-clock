@@ -16,7 +16,7 @@ typedef enum {
 } button_t;
 
 
-#define BUTTON_DEBOUNCE_MS 100
+#define BUTTON_DEBOUNCE_MS 200
 
 
 void button_init(void);

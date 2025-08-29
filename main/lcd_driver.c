@@ -5,6 +5,7 @@
 #include "lcd_driver.h"
 #include "event_handler.h"
 #include "timer.h" // for unix_ts
+#include "state_machine.h"
 
 static const char *TAG = "I2C_LCD";
 static const uint8_t COMMAND_8BIT_MODE = 0b00110000;
@@ -42,8 +43,6 @@ static bool next_render_requested = false;
 static uint8_t cursor_col = 0;
 static uint8_t cursor_row = 0;
 
-static lcd_screen_state_t lcd_screen_state = LCD_SCREEN_SPLASH;
-
 // Forward declarations
 
 void lcd_set_cursor_position(uint8_t col, uint8_t row);
@@ -61,6 +60,8 @@ void lcd_update_task(void *pvParameter);
 void constant_screen(const char *content);
 void screen_clock(void);
 void screen_settings(void);
+void screen_editing(void);
+void screen_lcd_test(void);
 
 static void lcd_init_cycle(void);
 static esp_err_t i2c_send_with_toggle(uint8_t data);
@@ -77,19 +78,25 @@ void lcd_render_cycle()
   }
   isRendering = true;
 
-  switch (lcd_screen_state)
+  switch (get_top_state())
   {
-  case LCD_SCREEN_SPLASH:
+  case STATE_INIT:
     constant_screen(SPLASH_SCREEN_CONTENT);
     break;
-  case LCD_SCREEN_RESTARTING:
+  case STATE_RESTART:
     constant_screen(RESTART_SCREEN_CONTENT);
     break;
-  case LCD_SCREEN_CLOCK:
+  case STATE_CLOCK:
     screen_clock();
     break;
-  case LCD_SCREEN_SETTINGS:
+  case STATE_MENU:
     screen_settings();
+    break;
+  case STATE_EDIT:
+    screen_editing();
+    break;
+  case STATE_LCD_TEST:
+    screen_lcd_test();
     break;
   default:
     break;
@@ -197,8 +204,134 @@ void screen_clock(void)
 void screen_settings(void)
 {
   lcd_clear_buffer();
+
+  int count = get_menu_count();
+  int start = get_menu_scroll_top();
+
+  int max_start = count > LCD_ROWS ? count - LCD_ROWS : 0;
+
+  // clamp start into valid range:
+  if (start < 0)
+    start = 0;
+  if (start > max_start)
+    start = max_start;
+
+  int selected = get_menu_selected();
+
+  for (int row = 0; row < LCD_ROWS; ++row)
+  {
+    int idx = start + row;
+    if (idx >= count)
+      break;
+
+    // cursor caret
+    if (selected == idx)
+    {
+      lcd_set_cursor(0, row);
+      lcd_write_character((char)0x7E);
+    }
+
+    // menu item
+    const char *item = get_menu_item(idx);
+    if (item)
+    {
+      lcd_set_cursor(2, row);
+      lcd_write_buffer(item, strnlen(item, LCD_COLS - 2)); // safe length
+    }
+  }
+
+  if (start > 0)
+  {
+    lcd_set_cursor(LCD_COLS - 1, 0);
+    lcd_write_text("^");
+  }
+  if (start + LCD_ROWS < count)
+  {
+    lcd_set_cursor(LCD_COLS - 1, LCD_ROWS - 1);
+    lcd_write_text("v");
+  }
+}
+
+void screen_editing(void)
+{
+  edit_mode_t mode = get_edit_mode();
+  lcd_clear_buffer();
+  
+  // Headline
   lcd_set_cursor(0, 0);
-  lcd_write_text("Settings");
+  if (mode == EDIT_REALTIME)
+  {
+    lcd_write_text("Realtime:");
+  }
+  else if (mode == EDIT_MODELTIME)
+  {
+    lcd_write_text("Modeltime:");
+  }
+  else if (mode == EDIT_TIMESCALE)
+  {
+    lcd_write_text("Timescale:");
+  }
+  
+
+  // Time
+  if (mode == EDIT_REALTIME || mode == EDIT_MODELTIME)
+  {
+    lcd_set_cursor(0, 1);
+    int32_t ts_val = get_edit_timestamp();
+    struct tm tm;
+    ts_to_tm(ts_val, &tm);
+    lcd_write_textf("%04d-%02d-%02d  %02d:%02d:%02d", 20, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+    int cursor = get_edit_cursor();
+    // positions: 0, 5, 8, 12, 15, 18
+    if (cursor == 0)
+      lcd_set_cursor(0, 2);
+    else if ( cursor < 3)
+      lcd_set_cursor(2 + cursor * 3, 2);
+    else
+      lcd_set_cursor(3 + cursor * 3, 2);
+    
+    lcd_write_text(cursor == 0 ? "^^^^" : "^^");
+  }
+  else if (mode == EDIT_TIMESCALE)
+  {
+    lcd_set_cursor(9, 1);
+    uint32_t timescale = get_edit_timescale();
+    lcd_write_textf("%02d", 2, timescale);
+    lcd_set_cursor(9, 2);
+    lcd_write_text("^^");
+  }
+
+  // buttons
+  lcd_set_cursor(0, 3);
+  lcd_write_text("BACK");
+  lcd_set_cursor(16, 3);
+  lcd_write_text("OK");
+}
+
+void screen_lcd_test(void)
+{
+  lcd_clear_buffer();
+
+  lcd_set_cursor(0, 0);
+  lcd_write_text("Y/X 0123456789ABCDEF");
+
+  int i = get_lcd_test_iterator();
+
+  for (int row = 0; row < LCD_ROWS - 1; row++)
+  {
+    int y = row + i;
+    lcd_set_cursor(0, row + 1);
+    lcd_write_textf("%1XX", 2, y & 0xF); // prints 0X, 1X, 2X, etc
+
+    // characters
+    lcd_set_cursor(4, row + 1);
+    for (int x = 0; x < 16; x++)
+    {
+      unsigned char c = (y * 16) + x;
+      lcd_write_character((char)c);
+    }
+  }
 }
 
 // -----------------
@@ -390,7 +523,6 @@ void lcd_toggle_backlight(bool state)
   }
   ESP_ERROR_CHECK(i2c_master_transmit(i2c_device_handle, &lcd_backlight_status, 1, -1));
 }
-
 
 // -----------------
 // LCD Event Handler

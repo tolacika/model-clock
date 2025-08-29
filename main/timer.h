@@ -10,13 +10,8 @@
 // ----------------------
 // Timescale settings
 // ----------------------
-#define TIMESCALE_1_1 1
-#define TIMESCALE_1_2 2
-#define TIMESCALE_1_6 6
-#define TIMESCALE_1_12 12
-#define TIMESCALE_1_20 20
-#define TIMESCALE_1_30 30
-#define TIMESCALE_1_60 60
+#define DEFAULT_TIMESCALE 2
+#define MAX_TIMESCALE 60
 
 #define TIMER_RES_HZ 1000000ULL
 
@@ -36,7 +31,16 @@ uint32_t timer_get_timescale(void);
 // Utility: format unix_ts into "YYYY-MM-DD HH:MM:SS"
 void format_time(time_t unix_ts, char *out, size_t out_sz);
 
+// Convert UNIX timestamp → tm
+void ts_to_tm(uint32_t unix_ts, struct tm *out);
+
+// Convert tm → UNIX timestamp
+uint32_t tm_to_ts(struct tm *in);
+
 // Check if timer is running
 bool timer_is_running(void);
+
+// Set timescale
+void timer_set_timescale(uint32_t new_timescale);
 
 #endif

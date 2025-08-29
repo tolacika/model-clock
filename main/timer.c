@@ -9,15 +9,13 @@ volatile uint32_t unix_ts = 1735689600ULL; // Start: 2025-01-01 00:00:00
 QueueHandle_t tick_queue;
 
 static gptimer_handle_t gptimer = NULL;
-static uint32_t current_timescale = TIMESCALE_1_2; // default 1:2
+static uint32_t current_timescale = DEFAULT_TIMESCALE; // default 1:2
 static bool timer_running = false;
 
 // Pause timer
 void timer_pause(void);
 // Resume timer
 void timer_resume(void);
-// Set timescale
-void timer_set_timescale(uint32_t new_timescale);
 
 // ----------------------
 // ISR callback
@@ -59,7 +57,8 @@ void tick_consumer_task(void *pvParams)
 void timer_event_handler(void *handler_arg, esp_event_base_t base, int32_t id, void *event_data)
 {
   ESP_LOGI(TAG, "Prio: %d, Core: %d", uxTaskPriorityGet(NULL), xPortGetCoreID());
-  if (base == CUSTOM_EVENTS) {
+  if (base == CUSTOM_EVENTS)
+  {
     switch (id)
     {
     case EVENT_TIMER_RESUME:
@@ -125,10 +124,23 @@ void format_time(time_t ts, char *out, size_t out_sz)
   strftime(out, out_sz, "%Y-%m-%d  %H:%M:%S", &tm_info);
 }
 
+// Convert UNIX timestamp → tm
+void ts_to_tm(uint32_t unix_ts, struct tm *out)
+{
+  time_t t = unix_ts;
+  gmtime_r(&t, out); // use localtime_r if you want timezone
+}
+
+// Convert tm → UNIX timestamp
+uint32_t tm_to_ts(struct tm *in)
+{
+  return (uint32_t)mktime(in); // normalizes fields too
+}
+
 // Sets the timer timescale
 void timer_set_timescale(uint32_t new_timescale)
 {
-  if (new_timescale == 0)
+  if (new_timescale == 0 || new_timescale > MAX_TIMESCALE)
     return;
   current_timescale = new_timescale;
 

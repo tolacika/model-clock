@@ -6,6 +6,7 @@
 #include "esp_random.h"
 #include "led_driver.h"
 #include "button_driver.h"
+#include "state_machine.h"
 
 static const char *TAG = "main";
 
@@ -37,6 +38,8 @@ void app_main(void)
   i2c_initialize();
   lcd_initialize();
 
+  state_machine_init();
+
   vTaskDelay(pdMS_TO_TICKS(3000));
 
   //lcd_set_screen_state(LCD_SCREEN_START_SCREEN);
@@ -46,21 +49,6 @@ void app_main(void)
   while (true)
   {
     vTaskDelay(pdMS_TO_TICKS(10000));
-    ESP_LOGI(TAG, "Heartbeat (Core 0), model_ts=%lu", unix_ts);
-
-    if (timer_is_running())
-    {
-      events_post(EVENT_TIMER_PAUSE, NULL, 0);
-    }
-    else
-    {
-      // pick a semirandom timescale from allowed values
-      uint32_t candidates[] = {1, 2, 6, 12, 20, 30, 60};
-      uint8_t idx = esp_random() % (sizeof(candidates) / sizeof(candidates[0]));
-      uint32_t ts = candidates[idx];
-
-      events_post(EVENT_TIMER_SCALE, &ts, sizeof(ts));
-      events_post(EVENT_TIMER_RESUME, NULL, 0);
-    }
+    ESP_LOGI(TAG, "Heartbeat, real=%llu, model=%lu", time(NULL), unix_ts);
   }
 }
