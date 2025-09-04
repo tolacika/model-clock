@@ -1,0 +1,88 @@
+menu "Application settings"
+
+    config BUTTON_START_STOP_GPIO
+        int "GPIO for start/stop button (default: 4)"
+        range -1 48 
+        default 4
+
+    config BUTTON_MENU_GPIO
+        int "GPIO for menu button (default: 5)"
+        range -1 48 
+        default 5
+
+    config BUTTON_LEFT_GPIO
+        int "GPIO for left button (default: 6)"
+        range -1 48 
+        default 6
+
+    config BUTTON_RIGHT_GPIO
+        int "GPIO for right button (default: 7)"
+        range -1 48 
+        default 7
+
+    config BUTTON_UP_GPIO
+        int "GPIO for up button (default: 10)"
+        range -1 48 
+        default 10
+
+    config BUTTON_DOWN_GPIO
+        int "GPIO for down button (default: 11)"
+        range -1 48 
+        default 11
+
+    config BUTTON_CANCEL_GPIO
+        int "GPIO for cancel button (default: 12)"
+        range -1 48 
+        default 12
+
+    config BUTTON_OK_GPIO
+        int "GPIO for OK button (default: 13)"
+        range -1 48 
+        default 13
+
+    config LED_GREEN_GPIO
+        int "GPIO for green LED (default: 35) - -1 for disabled"
+        range -1 48 
+        default 35
+
+    config LED_AMBER_GPIO
+        int "GPIO for amber LED (default: 36) - -1 for disabled"
+        range -1 48 
+        default 36
+
+    config LED_RED_GPIO
+        int "GPIO for red LED (default: 37) - -1 for disabled"
+        range -1 48 
+        default 37
+
+    config NEOPIXEL_GPIO
+        int "GPIO for NeoPixel (default: 48) - -1 for disabled"
+        range -1 48 
+        default 48
+
+    config CLOCK_OUT_CH1_GPIO
+        int "GPIO for clock out channel 1 (default: 38) - -1 for disabled"
+        range -1 48 
+        default -1
+
+    config CLOCK_OUT_CH2_GPIO
+        int "GPIO for clock out channel 2 (default: 47) - -1 for disabled"
+        range -1 48 
+        default -1
+
+    config I2C_SDA_GPIO
+        int "GPIO for I2C SDA (default: 8)"
+        range -1 48 
+        default 8
+        help
+            GPIO number for I2C SDA. Used for LCD backpack.
+
+    config I2C_SCL_GPIO
+        int "GPIO for I2C SCL (default: 9)"
+        range -1 48 
+        default 9
+        help
+            GPIO number for I2C SCL. Used for LCD backpack.
+    
+endmenu
+

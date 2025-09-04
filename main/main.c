@@ -15,7 +15,7 @@ void tick_logger_handler(void *handler_arg, esp_event_base_t base, int32_t id, v
 {
   uint32_t tick_val = *(uint32_t *)event_data;
   char buf[21];
-  format_time(tick_val, buf, sizeof(buf));
+  format_datetime(tick_val, buf, sizeof(buf));
   ESP_LOGD(TAG, "Tick event from handler: model time: %s", buf);
 }
 

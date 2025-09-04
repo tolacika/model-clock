@@ -11,6 +11,7 @@ ESP_EVENT_DECLARE_BASE(CUSTOM_EVENTS); // declaration of the timer events family
 enum
 {
   EVENT_MODEL_TICK,         // Event for model tick
+  EVENT_MODEL_MINUTE_TICK,  // Event for model tick
   EVENT_BUTTON_PRESS,       // Event for button press
   EVENT_RESTART_REQUESTED,  // Event for restart requested
   EVENT_TIMER_RESUME,       // Event for timer resume

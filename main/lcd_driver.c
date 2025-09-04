@@ -175,13 +175,13 @@ void screen_clock(void)
   lcd_set_cursor(0, 0);
   char bufR[21];
   time_t now = time(NULL);
-  format_time(now, bufR, sizeof(bufR));
+  format_datetime_lcd(now, bufR, sizeof(bufR));
   lcd_write_buffer(bufR, strlen(bufR));
 
   // Model time in the second line
   lcd_set_cursor(0, 1);
   char bufM[21];
-  format_time(unix_ts, bufM, sizeof(bufM));
+  format_datetime_lcd(unix_ts, bufM, sizeof(bufM));
   lcd_write_buffer(bufM, strlen(bufM));
 
   // App state in the last line

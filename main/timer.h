@@ -32,7 +32,8 @@ void timer_initialize(void);
 uint32_t timer_get_timescale(void);
 
 // Utility: format unix_ts into "YYYY-MM-DD HH:MM:SS"
-void format_time(time_t unix_ts, char *out, size_t out_sz);
+void format_datetime_lcd(time_t unix_ts, char *out, size_t out_sz);
+void format_datetime(time_t unix_ts, char *out, size_t out_sz);
 
 // Convert UNIX timestamp → tm
 void ts_to_tm(uint32_t unix_ts, struct tm *out);

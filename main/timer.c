@@ -46,12 +46,18 @@ static bool IRAM_ATTR timer_isr_callback(
 void tick_consumer_task(void *pvParams)
 {
   uint32_t tick_val;
+  struct tm tm_info;
 
   while (true)
   {
     if (xQueueReceive(tick_queue, &tick_val, portMAX_DELAY))
     {
+      ts_to_tm(tick_val, &tm_info);
       events_post(EVENT_MODEL_TICK, &tick_val, sizeof(tick_val));
+      if (timer_running && tm_info.tm_sec == 0)
+      {
+        events_post(EVENT_MODEL_MINUTE_TICK, &tick_val, sizeof(tick_val));
+      }
     }
   }
 }
@@ -119,11 +125,18 @@ void timer_initialize(void)
 }
 
 // Converts unix timestamp to formatted string in "YYYY-MM-DD HH:MM:SS" format
-void format_time(time_t ts, char *out, size_t out_sz)
+void format_datetime_lcd(time_t ts, char *out, size_t out_sz)
 {
   struct tm tm_info;
-  localtime_r(&ts, &tm_info);
+  ts_to_tm(ts, &tm_info);
   strftime(out, out_sz, "%Y-%m-%d  %H:%M:%S", &tm_info);
+}
+
+void format_datetime(time_t ts, char *out, size_t out_sz)
+{
+  struct tm tm_info;
+  ts_to_tm(ts, &tm_info);
+  strftime(out, out_sz, "%Y-%m-%d %H:%M:%S", &tm_info);
 }
 
 // Convert UNIX timestamp → tm
