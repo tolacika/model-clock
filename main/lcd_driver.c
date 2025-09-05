@@ -194,8 +194,8 @@ void screen_clock(void)
   {
     lcd_write_text("PAUSED");
   }
-  lcd_set_cursor(16, 3);
-  lcd_write_text("1:");
+  lcd_set_cursor(17, 3);
+  lcd_write_text("x");
   uint32_t app_scale = timer_get_timescale();
   lcd_write_textf("%02d", 2, app_scale);
 }

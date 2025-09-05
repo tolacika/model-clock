@@ -4,7 +4,7 @@
 #include "timer.h"
 #include "event_handler.h"
 #include "esp_random.h"
-#include "led_driver.h"
+#include "output_driver.h"
 #include "button_driver.h"
 #include "state_machine.h"
 #include "storage.h"
@@ -30,7 +30,7 @@ void app_main(void)
 
   events_subscribe(EVENT_MODEL_TICK, tick_logger_handler, NULL);
 
-  led_driver_init();
+  output_driver_init();
 
   button_init();
 

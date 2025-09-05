@@ -11,7 +11,7 @@
 // Timescale settings
 // ----------------------
 #define DEFAULT_TIMESCALE 2
-#define MAX_TIMESCALE 60
+#define MAX_TIMESCALE 30
 
 #define DEFAULT_UNIX_TS 1735689600ULL
 #define DEFAULT_REAL_TS 1735689600ULL

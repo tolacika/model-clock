@@ -45,7 +45,7 @@ static void enter_state_clock(void);
 static void enter_state_menu(void);
 static void enter_state_edit(void);
 static void handle_menu_button(button_t btn);
-static void handle_edit_button(button_t btn);
+static void handle_edit_button(button_t btn, int32_t event_id);
 static void timer_pause(void);
 static void timer_resume(void);
 
@@ -129,6 +129,9 @@ void state_machine_init(void)
 
   // Subscribe to button, ticks and timer state events
   events_subscribe(EVENT_BUTTON_PRESS, state_event_handler, NULL);
+  events_subscribe(EVENT_BUTTON_LONG_PRESS, state_event_handler, NULL);
+  events_subscribe(EVENT_BUTTON_REPEATED_PRESS, state_event_handler, NULL);
+  events_subscribe(EVENT_BUTTON_RELEASE, state_event_handler, NULL);
   // events_subscribe(EVENT_MODEL_TICK, state_event_handler, NULL);
   // events_subscribe(EVENT_TIMER_STATE_CHANGE, state_event_handler, NULL);
   events_subscribe(EVENT_EXIT_INIT_STATE, state_event_handler, NULL);
@@ -181,7 +184,7 @@ static void state_event_handler(void *handler_arg, esp_event_base_t base, int32_
         menu_scroll_top = 0;
         enter_state_menu();
         break;
-      
+
       case STATE_MENU:
       case STATE_EDIT:
         menu_selected = 0;
@@ -193,14 +196,14 @@ static void state_event_handler(void *handler_arg, esp_event_base_t base, int32_
 
         enter_state_clock();
         break;
-      
+
       default:
         break;
       }
 
       return; // menu handled globally (state independent)
     }
-    
+
     if (state == STATE_CLOCK)
     {
       switch (btn)
@@ -222,7 +225,7 @@ static void state_event_handler(void *handler_arg, esp_event_base_t base, int32_
     }
     else if (state == STATE_EDIT)
     {
-      handle_edit_button(btn);
+      handle_edit_button(btn, id);
     }
     else if (state == STATE_LCD_TEST)
     {
@@ -248,6 +251,14 @@ static void state_event_handler(void *handler_arg, esp_event_base_t base, int32_
       default:
         break;
       }
+    }
+  }
+  else if (id == EVENT_BUTTON_LONG_PRESS || id == EVENT_BUTTON_REPEATED_PRESS || id == EVENT_BUTTON_RELEASE)
+  {
+    if (state == STATE_EDIT)
+    {
+      uint8_t btn = *(uint8_t *)event_data;
+      handle_edit_button(btn, id);
     }
   }
 }
@@ -368,44 +379,76 @@ static void handle_menu_button(button_t btn)
   }
 }
 
-static void handle_edit_button(button_t btn)
+static void handle_edit_button(button_t btn, int32_t event_id)
 {
-  if (btn == BUTTON_CANCEL)
+  if (event_id == EVENT_BUTTON_PRESS)
   {
-    edit_mode = EDIT_NONE;
-    enter_state_menu();
-  }
-  else if (btn == BUTTON_OK)
-  {
-    if (edit_mode == EDIT_REALTIME)
-      apply_real_time(edit_timestamp);
-    else if (edit_mode == EDIT_MODELTIME)
-      apply_model_time(edit_timestamp);
-    else if (edit_mode == EDIT_TIMESCALE)
-      apply_timescale(edit_timescale);
-    edit_mode = EDIT_NONE;
-    enter_state_menu();
-  }
-  else if (edit_mode == EDIT_REALTIME || edit_mode == EDIT_MODELTIME)
-  {
-    switch (btn)
+    if (btn == BUTTON_CANCEL)
     {
-    case BUTTON_LEFT:
-      edit_cursor--;
-      if (edit_cursor < 0)
-        edit_cursor = 0;
-      events_post(EVENT_LCD_UPDATE, NULL, 0);
-      break;
+      edit_mode = EDIT_NONE;
+      enter_state_menu();
+    }
+    else if (btn == BUTTON_OK)
+    {
+      if (edit_mode == EDIT_REALTIME)
+        apply_real_time(edit_timestamp);
+      else if (edit_mode == EDIT_MODELTIME)
+        apply_model_time(edit_timestamp);
+      else if (edit_mode == EDIT_TIMESCALE)
+        apply_timescale(edit_timescale);
+      edit_mode = EDIT_NONE;
+      enter_state_menu();
+    }
+    else if (edit_mode == EDIT_REALTIME || edit_mode == EDIT_MODELTIME)
+    {
+      switch (btn)
+      {
+      case BUTTON_LEFT:
+        edit_cursor--;
+        if (edit_cursor < 0)
+          edit_cursor = 0;
+        events_post(EVENT_LCD_UPDATE, NULL, 0);
+        break;
 
-    case BUTTON_RIGHT:
-      edit_cursor++;
-      if (edit_cursor > 5)
-        edit_cursor = 5;
-      events_post(EVENT_LCD_UPDATE, NULL, 0);
-      break;
+      case BUTTON_RIGHT:
+        edit_cursor++;
+        if (edit_cursor > 5)
+          edit_cursor = 5;
+        events_post(EVENT_LCD_UPDATE, NULL, 0);
+        break;
 
-    case BUTTON_UP:
-    case BUTTON_DOWN:
+      case BUTTON_UP:
+      case BUTTON_DOWN:
+        // Handled later
+        break;
+      default:
+        break;
+      }
+    }
+    else if (edit_mode == EDIT_TIMESCALE)
+    {
+      switch (btn)
+      {
+      case BUTTON_LEFT:
+      case BUTTON_RIGHT:
+        // disabled
+        break;
+
+      case BUTTON_UP:
+      case BUTTON_DOWN:
+        // Handled later
+        break;
+
+      default:
+        break;
+      }
+    }
+  }
+
+  if ((btn == BUTTON_UP || btn == BUTTON_DOWN) && (event_id == EVENT_BUTTON_PRESS || event_id == EVENT_BUTTON_REPEATED_PRESS))
+  {
+    if (edit_mode == EDIT_REALTIME || edit_mode == EDIT_MODELTIME)
+    {
       int dir = btn == BUTTON_UP ? 1 : -1;
       struct tm tm;
       ts_to_tm(edit_timestamp, &tm);
@@ -442,36 +485,16 @@ static void handle_edit_button(button_t btn)
 
       edit_timestamp = tm_to_ts(&tm);
       events_post(EVENT_LCD_UPDATE, NULL, 0);
-      break;
-    default:
-      break;
     }
-  }
-  else if (edit_mode == EDIT_TIMESCALE)
-  {
-    switch (btn)
+    else if (edit_mode == EDIT_TIMESCALE)
     {
-    case BUTTON_LEFT:
-    case BUTTON_RIGHT:
-      // disabled
-      break;
-
-    case BUTTON_UP:
-      edit_timescale++;
+      int dir = btn == BUTTON_UP ? 1 : -1;
+      edit_timescale += dir;
       if (edit_timescale > MAX_TIMESCALE)
         edit_timescale = MAX_TIMESCALE;
-      events_post(EVENT_LCD_UPDATE, NULL, 0);
-      break;
-
-    case BUTTON_DOWN:
-      edit_timescale--;
       if (edit_timescale < 1)
         edit_timescale = 1;
       events_post(EVENT_LCD_UPDATE, NULL, 0);
-      break;
-    
-    default:
-      break;
     }
   }
 }

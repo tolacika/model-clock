@@ -10,16 +10,19 @@ ESP_EVENT_DECLARE_BASE(CUSTOM_EVENTS); // declaration of the timer events family
 // Event types
 enum
 {
-  EVENT_MODEL_TICK,         // Event for model tick
-  EVENT_MODEL_MINUTE_TICK,  // Event for model tick
-  EVENT_BUTTON_PRESS,       // Event for button press
-  EVENT_RESTART_REQUESTED,  // Event for restart requested
-  EVENT_TIMER_RESUME,       // Event for timer resume
-  EVENT_TIMER_PAUSE,        // Event for timer pause
-  EVENT_TIMER_SCALE,        // Event for timer scale
-  EVENT_TIMER_STATE_CHANGE, // Event for timer state change
-  EVENT_LCD_UPDATE,         // Event for LCD update
-  EVENT_EXIT_INIT_STATE,    // Event for exit init state
+  EVENT_MODEL_TICK,            // Event for model tick
+  EVENT_MODEL_MINUTE_TICK,     // Event for model tick
+  EVENT_BUTTON_PRESS,          // Event for button press
+  EVENT_BUTTON_LONG_PRESS,     // Event for button long press
+  EVENT_BUTTON_REPEATED_PRESS, // Event for button repeated press
+  EVENT_BUTTON_RELEASE,        // Event for button release
+  EVENT_RESTART_REQUESTED,     // Event for restart requested
+  EVENT_TIMER_RESUME,          // Event for timer resume
+  EVENT_TIMER_PAUSE,           // Event for timer pause
+  EVENT_TIMER_SCALE,           // Event for timer scale
+  EVENT_TIMER_STATE_CHANGE,    // Event for timer state change
+  EVENT_LCD_UPDATE,            // Event for LCD update
+  EVENT_EXIT_INIT_STATE,       // Event for exit init state
 };
 
 void events_init(void);
