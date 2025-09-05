@@ -6,6 +6,8 @@
 #include "event_handler.h"
 #include "timer.h" // for unix_ts
 #include "state_machine.h"
+#include "menu/menu.h"
+#include "menu/menu_table.h"
 
 static const char *TAG = "I2C_LCD";
 static const uint8_t COMMAND_8BIT_MODE = 0b00110000;
@@ -79,7 +81,7 @@ void lcd_render_cycle()
   }
   isRendering = true;
 
-  switch (get_top_state())
+  switch (state_ctx.state)
   {
   case STATE_INIT:
     constant_screen(SPLASH_SCREEN_CONTENT);
@@ -231,11 +233,11 @@ void screen_settings(void)
     }
 
     // menu item
-    const char *item = get_menu_item(idx);
+    const menu_entry_t *item = get_menu_item(idx);
     if (item)
     {
       lcd_set_cursor(2, row);
-      lcd_write_buffer(item, strnlen(item, LCD_COLS - 2)); // safe length
+      lcd_write_buffer(item->label, strnlen(item->label, LCD_COLS - 2)); // safe length
     }
   }
 
@@ -281,7 +283,7 @@ void screen_editing(void)
     ts_to_tm(ts_val, &tm);
     lcd_write_textf("%04d-%02d-%02d  %02d:%02d:%02d", 20, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
-    int cursor = get_edit_cursor();
+    int8_t cursor = get_edit_cursor();
     // positions: 0, 5, 8, 12, 15, 18
     if (cursor == 0)
       lcd_set_cursor(0, 2);
